@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM-Powered Employee Attendance</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #428dd771;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 20px;
+        }
+        .container {
+            background-color: #ffffff6a;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(7, 0, 0, 0.1);
+            width: 100%;
+            max-width: 800px;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 25px;
+        }
+        h2 {
+            color: #0056b3;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eeeeee4f;
+            padding-bottom: 10px;
+        }
+        .section {
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"],
+        input[type="date"],
+        select,
+        textarea {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .output-box {
+            background-color: #e9e9e9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        .warning {
+            color: #e44d26;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #e44d26;
+            background-color: #fdd;
+            border-radius: 4px;
+        }
+        .message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .employee-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #a67373;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #07345364;
+            margin-bottom: 20px;
+        }
+        .employee-item {
+            margin-bottom: 8px;
+        }
+        .employee-item input[type="checkbox"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LLM-Powered Employee Attendance</h1>
+
+        <div class="section">
+            <h2>1. Mark Attendance</h2>
+            <div class="employee-list" id="employeeList">
+                {% if employees %}
+                    {% for emp in employees %}
+                        <div class="employee-item">
+                            <input type="checkbox" id="emp-{{ emp.id }}" name="employee_id" value="{{ emp.id }}">
+                            <label for="emp-{{ emp.id }}">{{ emp.name }} (ID: {{ emp.id }})</label>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No employees found. Please check database connection or 'employee' table.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>2. Attendance Details</h2>
+            <label for="meetingDate">Meeting Date:</label>
+            <input type="date" id="meetingDate">
+            <label for="meetingTime">Meeting Time:</label>
+            <select id="meetingTime">
+                <option value="09:00:00">9 AM</option>
+                <option value="10:00:00">10 AM</option>
+                <option value="11:00:00">11 AM</option>
+                <option value="12:00:00">12 PM</option>
+                <option value="13:00:00">1 PM</option>
+                <option value="14:00:00">2 PM</option>
+                <option value="15:00:00">3 PM</option>
+                <option value="16:00:00">4 PM</option>
+                <option value="17:00:00">5 PM</option>
+            </select>
+            
+            <label for="insertedById">Inserted By ID:</label>
+            <input type="text" id="insertedById" placeholder="e.g., 1486">
+
+            <button onclick="generateSQL()">Generate SQL for Attendance</button>
+            <div id="loadingIndicator" style="display: none; margin-top: 10px;">Generating SQL...</div>
+        </div>
+
+        <div class="section">
+            <h2>3. Review & Execute SQL</h2>
+            <div class="warning">
+                WARNING: Directly executing LLM-generated SQL can be highly risky. Always review the generated SQL before executing!
+            </div>
+            <label for="generatedSql">Generated SQL Queries:</label>
+            <textarea id="generatedSql" rows="10" readonly placeholder="SQL query will appear here..."></textarea>
+            <button onclick="executeSQL()">Execute SQL</button>
+            <div id="executeLoadingIndicator" style="display: none; margin-top: 10px;">Executing SQL...</div>
+        </div>
+
+        <div id="responseMessage" class="message" style="display: none;"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('meetingDate').value = `${yyyy}-${mm}-${dd}`;
+        });
+
+        async function generateSQL() {
+            const checkboxes = document.querySelectorAll('input[name="employee_id"]');
+            const presentEmployeeIds = [];
+            const allEmployeeIds = [];
+
+            checkboxes.forEach(cb => {
+                allEmployeeIds.push(cb.value);
+                if (cb.checked) {
+                    presentEmployeeIds.push(cb.value);
+                }
+            });
+
+            const meetingDate = document.getElementById('meetingDate').value;
+            const meetingTime = document.getElementById('meetingTime').value;
+            const insertedById = document.getElementById('insertedById').value;
+
+            const responseMessage = document.getElementById('responseMessage');
+            responseMessage.style.display = 'none';
+
+            if (!meetingDate || !meetingTime || !insertedById) {
+                responseMessage.textContent = 'Please fill in Meeting Date, Meeting Time, and Inserted By ID.';
+                responseMessage.className = 'message error';
+                responseMessage.style.display = 'block';
+                return;
+            }
+
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('generatedSql').value = '';
+
+            try {
+                const response = await fetch('/generate_attendance_sql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        all_employee_ids: allEmployeeIds,
+                        present_employee_ids: presentEmployeeIds,
+                        meeting_date: meetingDate,
+                        meeting_time_str: meetingTime,
+                        inserted_by_id: insertedById
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('generatedSql').value = data.sql_queries.join('\n\n');
+                    responseMessage.textContent = 'SQL queries generated successfully. Review them before executing!';
+                    responseMessage.className = 'message success';
+                    responseMessage.style.display = 'block';
+                } else {
+                    responseMessage.textContent = `Error: ${data.error || 'Failed to generate SQL.'}`;
+                    responseMessage.className = 'message error';
+                    responseMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                responseMessage.textContent = `Network error: ${error.message}`;
+                responseMessage.className = 'message error';
+                responseMessage.style.display = 'block';
+            } finally {
+                document.getElementById('loadingIndicator').style.display = 'none';
+            }
+        }
+
+        async function executeSQL() {
+            const generatedSqlText = document.getElementById('generatedSql').value;
+            const sqlQueries = generatedSqlText.split('\n\n').filter(q => q.trim() !== '');
+
+            const responseMessage = document.getElementById('responseMessage');
+            responseMessage.style.display = 'none';
+
+            if (!generatedSqlText || sqlQueries.length === 0) {
+                responseMessage.textContent = 'No SQL queries to execute. Please generate them first.';
+                responseMessage.className = 'message error';
+                responseMessage.style.display = 'block';
+                return;
+            }
+
+            if (!confirm('Are you sure you want to execute these SQL queries? This action is irreversible.')) return;
+
+            document.getElementById('executeLoadingIndicator').style.display = 'block';
+
+            try {
+                const response = await fetch('/execute_generated_sql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sql_queries: sqlQueries })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    responseMessage.textContent = data.message;
+                    responseMessage.className = 'message success';
+                    responseMessage.style.display = 'block';
+                } else {
+                    responseMessage.textContent = `Error executing SQL: ${data.error || 'Unknown error.'}`;
+                    responseMessage.className = 'message error';
+                    responseMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                responseMessage.textContent = `Network error: ${error.message}`;
+                responseMessage.className = 'message error';
+                responseMessage.style.display = 'block';
+            } finally {
+                document.getElementById('executeLoadingIndicator').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
